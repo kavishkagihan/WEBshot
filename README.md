@@ -15,6 +15,7 @@ If you are a Bug hunter or a CTF player who often works with big web application
 
 # Documentation
 You can get the full documentation from here.
+https://kavigihan.medium.com/webshot-web-page-capturing-tool-60ccc3522bab
 
 
 # Contact 
