@@ -1,0 +1,240 @@
+#!/usr/bin/python3
+from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
+from datetime import datetime
+from colored import fg
+import os, shutup, sys, threading, signal
+import concurrent.futures
+import argparse, random, time
+import http.server, socketserver
+from progress.bar import IncrementalBar
+
+red = fg('red')
+green = fg('green')
+blue = fg('blue')
+white = fg('white')
+
+############################# Config ###############################################
+
+OUT_DIR = 'output'
+SS_DIR = 'ss'
+IMG_WIDTH = 300
+IMG_HEIGHT = 350
+SRV_ADDR = "127.0.0.1"
+SRV_PORT = 81
+CUSTOM_DRIVER = False
+DRIVER_PATH = ""
+
+####################################################################################
+
+shutup.please()
+TITLE_LIST = []
+SITE_LIST = []
+stdin_content = ""
+REPORT_TEMPLATE = f'assets/index.html.tmp'
+REPORT_FILE = f'{OUT_DIR}/index.html'
+
+
+parser = argparse.ArgumentParser(description='Web page capturing tool.')
+parser.add_argument('-f','--file', metavar='', help='File with the list of URLs')
+parser.add_argument('-v','--verbose', default=False,  action='store_true', help='Show verbose output')
+parser.add_argument('-F','--firefox', default=True,  action='store_true', help='Use Firefox driver [default]')
+parser.add_argument('-C','--chrome', default=False,  action='store_true', help='Use Chrome driver')
+parser.add_argument('-N','--noreport', default=False,  action='store_true', help='Avoid report processing')
+parser.add_argument('-S','--server', default=False,  action='store_true', help='Start a HTTP server to view the report')
+args = parser.parse_args()
+
+if not CUSTOM_DRIVER:
+    if args.firefox:
+        DRIVER_PATH = 'geckodriver/geckodriver'
+
+    elif args.chrome:
+        DRIVER_PATH = 'chromedriver/chromedriver'
+
+def banner():
+    b = red + f""" 
+
+     █     █░▓█████  ▄▄▄▄     ██████  ██░ ██  ▒█████  ▄▄▄█████▓
+    ▓█░ █ ░█░▓█   ▀ ▓█████▄ ▒██    ▒ ▓██░ ██▒▒██▒  ██▒▓  ██▒ ▓▒
+    ▒█░ █ ░█ ▒███   ▒██▒ ▄██░ ▓██▄   ▒██▀▀██░▒██░  ██▒▒ ▓██░ ▒░
+    ░█░ █ ░█ ▒▓█  ▄ ▒██░█▀    ▒   ██▒░▓█ ░██ ▒██   ██░░ ▓██▓ ░ 
+    ░░██▒██▓ ░▒████▒░▓█  ▀█▓▒██████▒▒░▓█▒░██▓░ ████▓▒░  ▒██▒ ░ 
+    ░ ▓░▒ ▒  ░░ ▒░ ░░▒▓███▀▒▒ ▒▓▒ ▒ ░ ▒ ░░▒░▒░ ▒░▒░▒░   ▒ ░░   
+      ▒ ░ ░   ░ ░  ░▒░▒   ░ ░ ░▒  ░ ░ ▒ ░▒░ ░  ░ ▒ ▒░     ░    
+      ░   ░     ░    ░    ░ ░  ░  ░   ░  ░░ ░░ ░ ░ ▒    ░      
+        ░       ░  ░ ░            ░   ░  ░  ░    ░ ░           
+                          ░                                    
+
+                                            by Kavishka Gihan
+    """ + white 
+    print(b)
+def check_req():
+    global OUT_DIR, stdin_content
+    if not os.path.isdir(OUT_DIR):
+        os.system(f'mkdir {OUT_DIR}')
+        os.system(f'mkdir {OUT_DIR}/{SS_DIR}')
+
+    if not args.file:
+        for line in sys.stdin:
+            stdin_content += line
+
+def init():
+    global DRIVER_PATH
+    print(f'[{datetime.now().strftime("%H:%M:%S")}] Initializing the driver.')
+    options = Options()
+
+
+    options.headless = True
+    user_agent = "WEBshot v1.0"
+    options.add_argument(f'user-agent={user_agent}')
+    options.add_argument("--window-size=500,300")
+    options.add_argument('--ignore-certificate-errors')
+    options.add_argument('--allow-running-insecure-content')
+    options.add_argument("--disable-extensions")
+    options.add_argument("--proxy-server='direct://'")
+    options.add_argument("--proxy-bypass-list=*")
+    options.add_argument("--start-maximized")
+    options.add_argument('--disable-gpu')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--no-sandbox')
+
+    if args.firefox:
+        driver = webdriver.Firefox(options=options, executable_path=DRIVER_PATH)
+    elif args.chrome:
+        driver = webdriver.Chrome(options=options, executable_path=DRIVER_PATH)
+
+    print(f'[{datetime.now().strftime("%H:%M:%S")}] Driver initialized.')
+    
+    return driver
+
+def shot(website,driver):
+    driver.get(website.strip())
+
+    if args.verbose:
+        print(blue + f'\n{website[website.index("//") + 2:]}' + white)
+        print(f"Screenshot saved as: {OUT_DIR+ '/' + SS_DIR + '/' + website[website.index('//') + 2:].replace('/', '_').strip() + '.png'}")
+        print(f'Title: {driver.title}')
+        print(f'Size: {len(driver.page_source)}')
+        print(f'Cookies: {driver.get_cookies()}')
+
+    TITLE_LIST.append(driver.title)
+    driver.get_screenshot_as_file(OUT_DIR+ "/" + SS_DIR + "/" + website[website.index('//') + 2:].replace("/", "_").strip() + '.png')
+
+
+
+def run(driver):
+    try:
+
+        if args.file and os.path.isfile(args.file):
+            for line in open(args.file.strip(),'r'):
+                SITE_LIST.append(line.strip())            
+
+        else:
+            for line in stdin_content.strip().split('\n'):
+                SITE_LIST.append(line.strip()) 
+
+        if args.verbose:
+            for site in SITE_LIST:
+                shot(site, driver)
+
+        else: 
+            bar = IncrementalBar(f'[{datetime.now().strftime("%H:%M:%S")}] Capturing... ', max = len(SITE_LIST))
+            for site in SITE_LIST:
+                shot(site, driver)
+                bar.next()
+            bar.finish()
+
+    except Exception as e:
+        print(e)
+
+w = f'''
+                <tr>
+                    <td data-label="ID:">$$ID$$</td>
+                    <td data-label="URL:"><a href='$$URL$$'>$$URL$$</a></td>
+                    <td data-label="TITLE">$$TITLE$$</td>
+                    <td data-label="SS:"><a href='$$SS$$'><img src='$$SS$$' width="{IMG_WIDTH}" height="{IMG_HEIGHT}"></a>
+
+                </td>
+
+'''
+
+
+def make_report(SITE_LIST):
+    content = ""
+    global w, REPORT_TEMPLATE
+    w_bak = w
+    for index,site in enumerate(SITE_LIST):
+        w = w_bak
+        w = w.replace('$$ID$$', str(index + 1) )
+        w = w.replace('$$URL$$', str(site.strip()))
+        w = w.replace('$$TITLE$$', str(TITLE_LIST[index]))
+        w = w.replace('$$SS$$', str(SS_DIR + "/" + site[site.index('//') + 2:].replace("/", "_").strip() + '.png').strip())
+
+        content += w
+
+    with open(REPORT_TEMPLATE, 'r') as f:
+        lines = f.readlines()
+        new_lines = ""
+        for line in lines:
+            if line.strip() == '##content##':
+                line = content
+
+            new_lines += line
+
+    with open(REPORT_FILE, 'w') as f:
+        f.writelines(new_lines)
+
+    os.system(f'cp -r assets/css {OUT_DIR}')
+
+
+def start_server(ADDR,PORT):
+    class HttpRequestHandler(http.server.SimpleHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == '/':
+                self.path = f'{OUT_DIR}/'
+            else:
+                self.path = OUT_DIR + '/' + self.path
+
+            return http.server.SimpleHTTPRequestHandler.do_GET(self)
+
+    handler_object = HttpRequestHandler
+
+    my_server = socketserver.TCPServer((f"{ADDR}", PORT), handler_object)
+    
+    try:
+        my_server.serve_forever()
+
+    except KeyboardInterrupt:
+        my_server.shutdown()
+
+
+def main():
+    banner()
+    print(f'[{datetime.now().strftime("%H:%M:%S")}] Starting WEBshot.')
+
+    print(f'[{datetime.now().strftime("%H:%M:%S")}] Checking requirements.')
+    check_req()
+    driver = init()
+    starting_time = time.time()
+
+    print(f'[{datetime.now().strftime("%H:%M:%S")}] Startig the capturing process.')
+    run(driver)
+    print(f'[{datetime.now().strftime("%H:%M:%S")}] Capturing finished.')
+
+
+    print(f'[{datetime.now().strftime("%H:%M:%S")}] Stoppoing the driver.')
+    driver.quit()
+
+    if not args.noreport:
+        print(f'[{datetime.now().strftime("%H:%M:%S")}] Processing the report.')
+        make_report(SITE_LIST)
+
+        if args.server:
+            print(f'[{datetime.now().strftime("%H:%M:%S")}] Server started at {SRV_ADDR}:{SRV_PORT}')
+            start_server(SRV_ADDR,SRV_PORT)
+
+    ending_time = time.time()
+    print(f'[{datetime.now().strftime("%H:%M:%S")}] Done !!!')
+    print('\n[=] Time elapsed : ' + str(int(ending_time - starting_time)) + ' seconds.')
+
+main()
