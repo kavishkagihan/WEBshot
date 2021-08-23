@@ -5,6 +5,12 @@ WEBshot is an automated tool that allows you to capture screenshots of web pages
 If you are a Bug hunter or a CTF player who often works with big web applications, this tool can save you a lot of time. You can let this run in the background and focus on the custom exploitation.
 
 # Installation
+`git clone https://github.com/kavishkagihan/WEBshot.git`
+
+`cd WEBshot && chmod +x WEBshot`
+
+`pip3 install -r requirements.txt`
+
 
 
 # Documentation
