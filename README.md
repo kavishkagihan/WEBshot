@@ -7,9 +7,9 @@ If you are a Bug hunter or a CTF player who often works with big web application
 # Installation
 `git clone https://github.com/kavishkagihan/WEBshot.git`
 
-`cd WEBshot && chmod +x WEBshot`
+`cd WEBshot && chmod +x install.sh`
 
-`pip3 install -r requirements.txt`
+`./install.sh`
 
 
 
